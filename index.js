@@ -17,6 +17,21 @@ const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const config = require('./config.json');
 
+const mainDb = createDb('./data/', 'db.json');
+let allData, recentData;
+updateData();
+
+function updateData() {
+  allData = mainDb.get('data')
+                  .sortBy('name')
+                  .value();
+  recentData = mainDb.get('data')
+                     .sortBy('date')
+                     .reverse()
+                     .takeRight(5)
+                     .value();
+}
+
 function createDb(path, filename) {
   if (!fs.existsSync(path)) {
     // Create dir
@@ -37,20 +52,26 @@ function createDb(path, filename) {
   return db;
 }
 
-function error(status, msg) {
-  const err = new Error(msg);
-  err.status = status;
-  return err;
-}
-
 function removeTags (string) {
   return string ? string.replace(/<(?:.|\n)*?>/gm, '').trim() : '';
 }
+
+app.get('/domains', function(req, res, next) {
+  if (allData) res.send(allData);
+  else next();
+});
+
+app.get('/recent', function(req, res, next) {
+  if (recentData) res.send(recentData);
+  else next();
+});
 
 app.get('/:domain/logins', function(req, res, next) {
   const domain = req.params.domain;
   const db = createDb('./data/' + domain + '/', 'db.json');
   const data = db.get('data')
+                 .sortBy(['vote', 'date'])
+                 .reverse()
                  .value();
   if (data) res.send(data);
   else next();
@@ -59,10 +80,48 @@ app.get('/:domain/logins', function(req, res, next) {
 app.post('/:domain', (req, res) => {
   const domain = req.params.domain;
   const db = createDb('./data/' + domain + '/', 'db.json');
+  const date = new Date().toISOString();
   db.get('data')
-    .push(req.body)
+    .push({
+      date: date,
+      user: removeTags(req.body.user),
+      pass: removeTags(req.body.pass),
+      vote: 1
+    })
     .write();
-  res.json({ message: 'Post Successful'});
+  
+  const exists = mainDb.get('data')
+                       .find({ name: domain })
+                       .value();
+  if (exists) {
+    mainDb.get('data')
+          .find({ name: domain })
+          .assign({ date: date })
+          .write();
+  }
+  else {
+    mainDb.get('data')
+          .push({
+            date: date,
+            name: removeTags(domain)
+          })
+          .write();
+  }
+  updateData();
+
+  res.json({ message: 'OK'});
+});
+
+app.put('/:domain', (req, res) => {
+  const domain = req.params.domain;
+  const db = createDb('./data/' + domain + '/', 'db.json');
+  // update
+  db.get('data')
+    .find({ date: req.body.date })
+    .assign({ vote: req.body.vote })
+    .write();
+  
+  res.json({ message: 'OK'});
 });
 
 // middleware with an arity of 4 are considered

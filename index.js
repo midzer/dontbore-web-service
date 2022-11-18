@@ -56,6 +56,8 @@ function removeTags (string) {
   return string ? string.replace(/<(?:.|\n)*?>/gm, '').trim() : '';
 }
 
+app.options('*', function (req,res) { res.sendStatus(200); });
+
 app.get('/domains', function(req, res, next) {
   if (allData) res.send(allData);
   else next();

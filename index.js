@@ -74,13 +74,16 @@ app.route('/:domain')
   })
   .post((req, res, next) => {
     const domain = req.params.domain;
-    if (isValidDomain(domain)) {
+    if (req.body && isValidDomain(domain)) {
       try {
         new URL('https://' + domain)
       }
       catch (err) {
         return next(err);
       }
+    }
+    else {
+      return next();
     }
     const db = createDb('./data/' + domain + '/', 'db.json');
     const date = new Date().toISOString();
@@ -117,13 +120,16 @@ app.route('/:domain')
   })
   .put((req, res, next) => {
     const domain = req.params.domain;
-    if (isValidDomain(domain)) {
+    if (req.body && isValidDomain(domain)) {
       try {
         new URL('https://' + domain)
       }
       catch (err) {
         return next(err);
       }
+    }
+    else {
+      return next();
     }
     const db = createDb('./data/' + domain + '/', 'db.json');
     db.get('data')

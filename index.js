@@ -16,7 +16,7 @@ const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const config = require('./config.json');
 
-const mainDb = createDb('./data/', 'db.json');
+const mainDb = createDb();
 let allData;
 updateData();
 
@@ -26,32 +26,34 @@ function updateData() {
                   .value();
 }
 
-function createDb(path, filename) {
-  if (!fs.existsSync(path)) {
-    // Create dir
-    fs.mkdirSync(path, { recursive: true });
+function getDb(directory) {
+  const path = './data/' + directory + '/';
+  if (fs.existsSync(path)) {
+    const adapter = new FileSync(path + 'db.json');
+    return low(adapter);
   }
+
+  return null;
+}
+
+function createDb(directory = '') {
+  const path = './data/' + directory + '/';
   let reset = false;
-  const dbPath = path + filename;
-  if (!fs.existsSync(dbPath)) {
+  if (!fs.existsSync(path)) {
+    fs.mkdirSync(path, { recursive: true });
     reset = true;
   }
-  const adapter = new FileSync(dbPath);
-  const db = low(adapter);
+  const db = getDb(directory);
   if (reset) {
-    // Set some defaults
-    db.defaults({ data: [] })  
+    db.defaults({ data: [] })
       .write();
   }
+
   return db;
 }
 
 function removeTags (string) {
   return string ? string.replace(/<(?:.|\n)*?>/gm, '').trim() : '';
-}
-
-function isValidDomain (string) {
-  return /^([a-z0-9]{1,63}(-[a-z0-9]+)*\.)+[a-z]{2,}$/.test(string);
 }
 
 app.options('*', function (req,res) { res.sendStatus(200); });
@@ -64,28 +66,28 @@ app.get('/', function(req, res, next) {
 app.route('/:domain')
   .get((req, res, next) => {
     const domain = req.params.domain;
-    const db = createDb('./data/' + domain + '/', 'db.json');
-    const data = db.get('data')
-                   .sortBy(['vote', 'date'])
-                   .reverse()
-                   .value();
-    if (data) res.send(data);
-    else next();
+    const db = getDb(domain);
+    let data = [];
+    if (db) {
+      data = db.get('data')
+               .sortBy(['vote', 'date'])
+               .reverse()
+               .value();
+    }
+    res.send(data);
   })
   .post((req, res, next) => {
     const domain = req.params.domain;
-    if (req.body && isValidDomain(domain)) {
-      try {
-        new URL('https://' + domain)
-      }
-      catch (err) {
-        return next(err);
-      }
+    try {
+      new URL('http://' + domain)
     }
-    else {
+    catch (err) {
+      return next(err);
+    }
+    if (!(req.body.user && req.body.pass)) {
       return next();
     }
-    const db = createDb('./data/' + domain + '/', 'db.json');
+    const db = createDb(domain);
     const date = new Date().toISOString();
     db.get('data')
       .push({
@@ -120,18 +122,16 @@ app.route('/:domain')
   })
   .put((req, res, next) => {
     const domain = req.params.domain;
-    if (req.body && isValidDomain(domain)) {
-      try {
-        new URL('https://' + domain)
-      }
-      catch (err) {
-        return next(err);
-      }
+    try {
+      new URL('http://' + domain)
     }
-    else {
+    catch (err) {
+      return next(err);
+    }
+    if (!(req.body.date && req.body.vote)) {
       return next();
     }
-    const db = createDb('./data/' + domain + '/', 'db.json');
+    const db = createDb(domain);
     db.get('data')
       .find({ date: req.body.date })
       .assign({ vote: req.body.vote })

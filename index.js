@@ -4,7 +4,6 @@ const fs = require('fs');
 const express = require('express');
 const app = express();
 app.use(express.json());
-//app.use(express.urlencoded({ extended: true }));
 app.use(function(req, res, next) {
   // update to match the domain you will make the request from
   res.header("Access-Control-Allow-Origin", "*"); // YOUR-DOMAIN.TLD
@@ -18,18 +17,13 @@ const FileSync = require('lowdb/adapters/FileSync');
 const config = require('./config.json');
 
 const mainDb = createDb('./data/', 'db.json');
-let allData, recentData;
+let allData;
 updateData();
 
 function updateData() {
   allData = mainDb.get('data')
                   .sortBy('name')
                   .value();
-  recentData = mainDb.get('data')
-                     .sortBy('date')
-                     .reverse()
-                     .takeRight(5)
-                     .value();
 }
 
 function createDb(path, filename) {
@@ -56,75 +50,89 @@ function removeTags (string) {
   return string ? string.replace(/<(?:.|\n)*?>/gm, '').trim() : '';
 }
 
+function isValidDomain (string) {
+  return /^([a-z0-9]{1,63}(-[a-z0-9]+)*\.)+[a-z]{2,}$/.test(string);
+}
+
 app.options('*', function (req,res) { res.sendStatus(200); });
 
-app.get('/domains', function(req, res, next) {
+app.get('/', function(req, res, next) {
   if (allData) res.send(allData);
   else next();
 });
 
-app.get('/recent', function(req, res, next) {
-  if (recentData) res.send(recentData);
-  else next();
-});
-
-app.get('/:domain/logins', function(req, res, next) {
-  const domain = req.params.domain;
-  const db = createDb('./data/' + domain + '/', 'db.json');
-  const data = db.get('data')
-                 .sortBy(['vote', 'date'])
-                 .reverse()
-                 .value();
-  if (data) res.send(data);
-  else next();
-});
-
-app.post('/:domain', (req, res) => {
-  const domain = req.params.domain;
-  const db = createDb('./data/' + domain + '/', 'db.json');
-  const date = new Date().toISOString();
-  db.get('data')
-    .push({
-      date: date,
-      user: removeTags(req.body.user),
-      pass: removeTags(req.body.pass),
-      vote: 1
-    })
-    .write();
+app.route('/:domain')
+  .get((req, res, next) => {
+    const domain = req.params.domain;
+    const db = createDb('./data/' + domain + '/', 'db.json');
+    const data = db.get('data')
+                   .sortBy(['vote', 'date'])
+                   .reverse()
+                   .value();
+    if (data) res.send(data);
+    else next();
+  })
+  .post((req, res, next) => {
+    const domain = req.params.domain;
+    if (isValidDomain(domain)) {
+      try {
+        new URL('https://' + domain)
+      }
+      catch (err) {
+        return next(err);
+      }
+    }
+    const db = createDb('./data/' + domain + '/', 'db.json');
+    const date = new Date().toISOString();
+    db.get('data')
+      .push({
+        date: date,
+        user: removeTags(req.body.user),
+        pass: removeTags(req.body.pass),
+        vote: 1
+      })
+      .write();
+    
+    const exists = mainDb.get('data')
+                         .find({ name: domain })
+                         .value();
   
-  const exists = mainDb.get('data')
-                       .find({ name: domain })
-                       .value();
-  if (exists) {
+    if (exists) {
     mainDb.get('data')
           .find({ name: domain })
           .assign({ date: date })
           .write();
-  }
-  else {
-    mainDb.get('data')
-          .push({
-            date: date,
-            name: removeTags(domain)
-          })
-          .write();
-  }
-  updateData();
+    }
+    else {
+      mainDb.get('data')
+            .push({
+              date: date,
+              name: removeTags(domain)
+            })
+            .write();
+    }
+    updateData();
 
-  res.json({ message: 'OK'});
-});
-
-app.put('/:domain', (req, res) => {
-  const domain = req.params.domain;
-  const db = createDb('./data/' + domain + '/', 'db.json');
-  // update
-  db.get('data')
-    .find({ date: req.body.date })
-    .assign({ vote: req.body.vote })
-    .write();
+    res.json({ message: 'OK'});
+  })
+  .put((req, res, next) => {
+    const domain = req.params.domain;
+    if (isValidDomain(domain)) {
+      try {
+        new URL('https://' + domain)
+      }
+      catch (err) {
+        return next(err);
+      }
+    }
+    const db = createDb('./data/' + domain + '/', 'db.json');
+    db.get('data')
+      .find({ date: req.body.date })
+      .assign({ vote: req.body.vote })
+      .write();
   
-  res.json({ message: 'OK'});
-});
+    res.json({ message: 'OK'});
+  });
 
 // middleware with an arity of 4 are considered
 // error handling middleware. When you next(err)

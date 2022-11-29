@@ -65,19 +65,19 @@ app.get('/', function(req, res, next) {
 
 app.route('/:domain')
   .get((req, res, next) => {
-    const domain = req.params.domain;
+    const domain = removeTags(req.params.domain);
     const db = getDb(domain);
     let data = [];
     if (db) {
       data = db.get('data')
-               .sortBy(['vote', 'date'])
+               .sortBy(['upvote', 'date'])
                .reverse()
                .value();
     }
     res.send(data);
   })
   .post((req, res, next) => {
-    const domain = req.params.domain;
+    const domain = removeTags(req.params.domain);
     try {
       new URL('http://' + domain)
     }
@@ -94,7 +94,8 @@ app.route('/:domain')
         date: date,
         user: removeTags(req.body.user),
         pass: removeTags(req.body.pass),
-        vote: 1
+        upvotes: 1,
+        downvotes: 0
       })
       .write();
     
@@ -103,16 +104,16 @@ app.route('/:domain')
                          .value();
   
     if (exists) {
-    mainDb.get('data')
-          .find({ name: domain })
-          .assign({ date: date })
-          .write();
+      mainDb.get('data')
+            .find({ name: domain })
+            .assign({ date: date })
+            .write();
     }
     else {
       mainDb.get('data')
             .push({
               date: date,
-              name: removeTags(domain)
+              name: domain
             })
             .write();
     }
@@ -121,7 +122,7 @@ app.route('/:domain')
     res.json({ message: 'OK'});
   })
   .put((req, res, next) => {
-    const domain = req.params.domain;
+    const domain = removeTags(req.params.domain);
     try {
       new URL('http://' + domain)
     }
@@ -132,10 +133,16 @@ app.route('/:domain')
       return next();
     }
     const db = createDb(domain);
-    db.get('data')
-      .find({ date: req.body.date })
-      .assign({ vote: req.body.vote })
-      .write();
+    const login = db.get('data')
+                    .find({ date: req.body.date })
+                    .value();
+    if (vote === 1) {
+      login.assign({ upvote: login.upvote++ })
+    }
+    else if (vote === -1) {
+      login.assign({ downvote: login.downvote++ })
+    }
+    login.write();
   
     res.json({ message: 'OK'});
   });

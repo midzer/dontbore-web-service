@@ -6,7 +6,7 @@ const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
   // update to match the domain you will make the request from
-  res.header("Access-Control-Allow-Origin", "*"); // YOUR-DOMAIN.TLD
+  res.header("Access-Control-Allow-Origin", "https://dontbo.re"); // YOUR-DOMAIN.TLD
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
   if (req.method === "OPTIONS") {
